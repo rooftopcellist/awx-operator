@@ -82,6 +82,40 @@
   set_fact:
     now: '{{ lookup("pipe", "date +%F-%T") }}'
 
+
+
+### define a volumeClaimTemplate in the management-pod.yml.j2
+
+- name: Delete any existing management pod
+  shell: |
+    {{ kubectl_or_oc }} -n {{ kubernetes_namespace }} \
+      delete pod ansible-tower-management --grace-period=0 --ignore-not-found
+
+- name: Template management pod
+  set_fact:
+    management_pod: "{{ lookup('template', 'management-pod.yml.j2') }}"
+
+- name: Create management pod
+  shell: |
+    echo {{ management_pod | quote }} | {{ kubectl_or_oc }} apply -f -
+
+- name: Wait for management pod to start
+  shell: |
+    {{ kubectl_or_oc }} -n {{ kubernetes_namespace }} \
+      get pod ansible-tower-management -o jsonpath="{.status.phase}"
+  register: result
+  until: result.stdout == "Running"
+  retries: 60
+  delay: 10
+
+
+
+
+
+
+
+
+
 - name: Check for existing PVC
 
 - name: Create PVC for backup
@@ -111,6 +145,6 @@
     namespace: "{{ meta.namespace }}"
     pod: "{{ postgres_pod_name }}"
     command: >-
-      bash -c "PGPASSWORD={{ tower_old_postgres_pass }} {{ pgdump }} | PGPASSWORD={{ awx_postgres_pass }} {{ psql_restore }}"
+      bash -c "PGPASSWORD={{ tower_old_postgres_pass }} {{ pgdump }} > {{ playbook_dir }}/tower-openshift-backup-{{ now }}/tower.db"
   ignore_errors: true
   register: data_migration
