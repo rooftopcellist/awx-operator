@@ -80,6 +80,7 @@ rules:
       - awx.ansible.com
     resources:
       - '*'
+      - backups
     verbs:
       - '*'
 
