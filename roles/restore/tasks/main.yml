@@ -1,9 +1,9 @@
 ---
 
-- name: Set apiVersion and kind variables
-  set_fact:
-    api_version: '{{ hostvars["localhost"]["inventory_file"].split("/")[4:6] | join("/")  }}'
-    kind: '{{ hostvars["localhost"]["inventory_file"].split("/")[6]  }}'
+# - name: Set apiVersion and kind variables
+#   set_fact:
+#     api_version: '{{ hostvars["localhost"]["inventory_file"].split("/")[4:6] | join("/")  }}'
+#     kind: '{{ hostvars["localhost"]["inventory_file"].split("/")[6]  }}'
 
 - name: Look up details for this deployment
   k8s_info:
@@ -14,11 +14,9 @@
   register: this_restore
 
 - block:
-    - include_tasks: preflight.yml
+    - include_tasks: init.yml
 
     - include_tasks: init_awx.yml
-
-    - include_tasks: init.yml
 
     - include_tasks: postgres.yml
 
