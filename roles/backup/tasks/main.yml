@@ -30,9 +30,9 @@
 
     - include_tasks: postgres.yml
 
-    - include_tasks: secrets.yml
-
     - include_tasks: awx-cro.yml
+
+    - include_tasks: secrets.yml
 
     - name: Set flag signifying this backup was successful
       set_fact:
