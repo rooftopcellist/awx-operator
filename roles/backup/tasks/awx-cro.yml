@@ -25,9 +25,11 @@
     - {"key": "broadcast_websocket_secret", "value": "{{ this_awx['resources'][0]['status']['broadcastWebsocketSecret'] }}"}
     - {"key": "postgres_configuration_secret", "value": "{{ this_awx['resources'][0]['status']['postgresConfigurationSecret'] }} "}
 
-- name: Write awx object to pvc
-  k8s_exec:
-    namespace: "{{ backup_pvc_namespace }}"
-    pod: "{{ meta.name }}-db-management"
-    command: >-
-      bash -c 'echo "$0" > {{ backup_dir  }}/awx_object' {{ awx_spec | quote  }}
+# TODO: REMOVE ME
+- copy:
+    dest: "test-spec.txt"
+    content: "{{ awx_spec | to_yaml }}"
+
+- name: Nest secrets under a single variable
+  set_fact:
+    definitions: {"awx_spec": '{{ awx_spec | quote }}'}

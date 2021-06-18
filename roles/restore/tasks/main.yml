@@ -27,6 +27,8 @@
 
 - block:
     - include_tasks: init.yml
+    
+    - include_tasks: load_vars.yml
 
     - include_tasks: secrets.yml
 
