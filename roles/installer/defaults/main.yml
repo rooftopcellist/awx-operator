@@ -206,7 +206,7 @@ postgres_storage_requirements:
   requests:
     storage: 8Gi
 postgres_resource_requirements: {}
-postgres_data_path: '/var/lib/postgresql/data/pgdata'
+postgres_data_path: '/var/lib/pgsql/data/pgdata'
 
 # Persistence to the AWX project data folder
 # Whether or not the /var/lib/projects directory will be persistent
