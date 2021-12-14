@@ -36,7 +36,7 @@ spec:
 {% if bundle_ca_crt or projects_persistence|bool or init_container_extra_commands %}
       initContainers:
         - name: init
-          image: '{{ _init_container_image }}'
+          image: '{{ __init_container_image }}'
           imagePullPolicy: '{{ image_pull_policy }}'
           command:
             - /bin/sh
@@ -45,10 +45,6 @@ spec:
 {% if bundle_ca_crt  %}
               mkdir -p /etc/pki/ca-trust/extracted/{java,pem,openssl,edk2}
               update-ca-trust
-{% endif %}
-{% if projects_persistence|bool %}
-              chmod 775 /var/lib/awx/projects
-              chgrp 1000 /var/lib/awx/projects
 {% endif %}
 {% if init_container_extra_commands %}
               {{ init_container_extra_commands | indent(width=14) }}
@@ -310,11 +306,8 @@ spec:
       tolerations:
         {{ tolerations | indent(width=8) }}
 {% endif %}
-{% if projects_persistence|bool or (security_context_settings|length) %}
+{% if (security_context_settings|length) %}
       securityContext:
-{% if projects_persistence|bool %}
-        fsGroup: 1000
-{% endif %}
 {% if security_context_settings|length %}
         {{ security_context_settings | to_nice_yaml | indent(8) }}
 {% endif %}
