@@ -107,6 +107,35 @@ spec:
 {% if ingress_type | lower == 'route' and route_tls_termination_mechanism | lower == 'passthrough' %}
             - containerPort: 8053
 {% endif %}
+
+          livenessProbe:
+            httpGet:
+              path: /api/v2/ping
+{% if ingress_type | lower == 'route' and route_tls_termination_mechanism | lower == 'passthrough' %}
+              port: 8443
+              scheme: HTTPS
+{% else %}
+              port: 8052
+              scheme: HTTP
+{% endif %}
+            failureThreshold: 5
+            initialDelaySeconds: 90
+            periodSeconds: 10
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/v2/ping
+{% if ingress_type | lower == 'route' and route_tls_termination_mechanism | lower == 'passthrough' %}
+              port: 8443
+              scheme: HTTPS
+{% else %}
+              port: 8080
+              scheme: HTTP
+{% endif %}
+            failureThreshold: 10
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 10
           volumeMounts:
 {% if bundle_ca_crt %}
             - name: "ca-trust-extracted"
