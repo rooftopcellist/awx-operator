@@ -426,10 +426,7 @@ spec:
                   type: boolean
                 projects_use_existing_claim:
                   description: Using existing PersistentVolumeClaim
-                  type: string
-                  enum:
-                    - _Yes_
-                    - _No_
+                  type: boolean
                 projects_existing_claim:
                   description: PersistentVolumeClaim to mount /var/lib/projects directory
                   type: string
