@@ -45,6 +45,7 @@ spec:
 {% if postgres_priority_class is defined %}
       priorityClassName: '{{ postgres_priority_class }}'
 {% endif %}
+      # TODO: Remove Me
       initContainers:
         - name: database-check
           image: '{{ _init_container_image }}'
@@ -106,6 +107,10 @@ spec:
               value: '{{ postgres_initdb_args }}'
             - name: POSTGRES_HOST_AUTH_METHOD
               value: '{{ postgres_host_auth_method }}'
+{% if upgrade_postgres %}
+            - name: POSTGRESQL_UPGRADE
+              value: 'copy'
+{% endif %}
           ports:
             - containerPort: {{ awx_postgres_port | default('5432')}}
               name: postgres
