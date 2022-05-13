@@ -1,0 +1,20 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: '{{ ansible_operator_meta.name }}-postgres'
+  namespace: '{{ ansible_operator_meta.namespace }}'
+spec:
+  template:
+    spec:
+      selector:
+      matchLabels:
+        app.kubernetes.io/component: database
+        app.kubernetes.io/instance: postgres-awx
+
+      containers:
+      - name: postgres
+        image: '{{ _postgres_image }}' 
+        env:
+          - name: POSTGRESQL_ADMIN_PASSWORD
+            value: '{{ pg_admin_password }}'

@@ -108,8 +108,12 @@ spec:
             - name: POSTGRES_HOST_AUTH_METHOD
               value: '{{ postgres_host_auth_method }}'
 {% if upgrade_postgres %}
-            - name: POSTGRESQL_UPGRADE
-              value: 'copy'
+#     -e POSTGRESQL_MIGRATION_REMOTE_HOST=172.17.0.2 \
+#     -e POSTGRESQL_MIGRATION_ADMIN_PASSWORD=remoteAdminP@ssword
+            - name: POSTGRESQL_MIGRATION_REMOTE_HOST
+              value: '{{ pg_migration_remote_host }}'
+            - name: POSTGRESQL_MIGRATION_ADMIN_PASSWORD
+              value: '{{ pg_admin_password }}'
 {% endif %}
           ports:
             - containerPort: {{ awx_postgres_port | default('5432')}}

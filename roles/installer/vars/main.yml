@@ -6,3 +6,4 @@ bundle_ca_crt: ''
 projects_existing_claim: ''
 path_to_pg_version: /var/lib/postgresql/data/pgdata/PG_VERSION # replace this with the PG_VERSION path inside the downstream image if different
 upgrade_postgres: false
+supported_postgres_version: 12
