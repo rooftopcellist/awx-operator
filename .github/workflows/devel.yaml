@@ -22,6 +22,6 @@ jobs:
         with:
           image: awx-operator
           tags: devel
-          registry: quay.io/ansible/
+          registry: quay.io/chadams/
           username: ${{ secrets.QUAY_USER }}
           password: ${{ secrets.QUAY_TOKEN }}
