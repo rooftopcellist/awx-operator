@@ -22,4 +22,7 @@
   kind: AWXRestore
   role: restore
   snakeCaseParameters: False
-# +kubebuilder:scaffold:watch
+  # Multiple reconciliation loops will only cause more issues,
+  # we should only attempt to create a new AWX instance once
+  watchDependentResources: True
+  # +kubebuilder:scaffold:watch

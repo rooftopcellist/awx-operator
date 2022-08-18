@@ -42,10 +42,6 @@
         - "postgres_pod['resources'][0]['status']['containerStatuses'][0]['ready'] == true"
       delay: 5
       retries: 60
-
-    - name: Set the resource pod name as a variable.
-      set_fact:
-        postgres_pod_name: "{{ postgres_pod['resources'][0]['metadata']['name'] }}"
   when: awx_postgres_type == 'managed'
 
 - name: Determine the timestamp for the backup once for all nodes
