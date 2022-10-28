@@ -19,4 +19,19 @@ jobs:
       - name: Adding README
         uses: dephraiim/translate-readme@main
         with:
-          LANG: fr #French
+          LANG: fr  # French
+
+      - name: Adding README - Hindi
+        uses: dephraiim/translate-readme@main
+        with:
+          LANG: es  # Spanish
+
+      - name: Adding README - Arabic
+        uses: dephraiim/translate-readme@main
+        with:
+          LANG: ja  # Japanese
+
+      - name: Adding README - French
+        uses: dephraiim/translate-readme@main
+        with:
+          LANG: zh-CN  # Simplified Chinese
