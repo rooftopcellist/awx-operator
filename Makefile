@@ -368,7 +368,7 @@ helm-index:
 	# checkout gh-pages branch and push up the new index file
 	git switch gh-pages
 	# TODO: Assess removal of additional origin
-	git fetch --all --tags
+	git fetch origin --tags
 
 	# This step to workaround issues with old releases being dropped.
 	# Until https://github.com/helm/chart-releaser/issues/133 happens
