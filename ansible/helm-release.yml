@@ -23,19 +23,19 @@
       args:
         chdir: "{{ playbook_dir }}/../"
 
-    # Move to chart releaser after https://github.com/helm/chart-releaser/issues/122 exists
-    - name: Upload helm chart
-      uri:
-        url: "https://uploads.github.com/repos/{{ chart_owner }}/{{ chart_repo }}/releases/{{ release.json.id }}/assets?name=awx-operator-{{ tag }}.tgz"
-        src: "{{ playbook_dir }}/../.cr-release-packages/awx-operator-{{ tag }}.tgz"
-        headers:
-          Authorization: "token {{ gh_token }}"
-          Content-Type: "application/octet-stream"
-        status_code:
-          - 200
-          - 201
-      register: asset_upload
-      changed_when: asset_upload.json.state == "uploaded"
+    # # Move to chart releaser after https://github.com/helm/chart-releaser/issues/122 exists
+    # - name: Upload helm chart
+    #   uri:
+    #     url: "https://uploads.github.com/repos/{{ chart_owner }}/{{ chart_repo }}/releases/{{ release.json.id }}/assets?name=awx-operator-{{ tag }}.tgz"
+    #     src: "{{ playbook_dir }}/../.cr-release-packages/awx-operator-{{ tag }}.tgz"
+    #     headers:
+    #       Authorization: "token {{ gh_token }}"
+    #       Content-Type: "application/octet-stream"
+    #     status_code:
+    #       - 200
+    #       - 201
+    #   register: asset_upload
+    #   changed_when: asset_upload.json.state == "uploaded"
 
     - name: Publish helm index
       command: |
