@@ -21,11 +21,11 @@ jobs:
 
       - name: Re-tag and promote awx-operator image
         run: |
-          docker pull ghcr.io/${{ github.repository }}:${{ github.event.release.tag_name }}
-          docker tag ghcr.io/${{ github.repository }}:${{ github.event.release.tag_name }} quay.io/${{ github.repository }}:${{ github.event.release.tag_name }}
-          docker tag ghcr.io/${{ github.repository }}:${{ github.event.release.tag_name }} quay.io/${{ github.repository }}:latest
-          docker push quay.io/${{ github.repository }}:${{ github.event.release.tag_name }}
-          docker push quay.io/${{ github.repository }}:latest
+          docker pull ghcr.io/${{ github.repository }}:1.1.3-test
+          docker tag ghcr.io/${{ github.repository }}:1.1.3-test quay.io/chadams/awx-operator:1.1.3-test
+          docker tag ghcr.io/${{ github.repository }}:1.1.3-test quay.io/chadams/awx-operator:latest
+          docker push quay.io/chadams/awx-operator:1.1.3-test
+          docker push quay.io/chadams/awx-operator:latest
 
       - name: Configure git
         run: |
@@ -35,7 +35,7 @@ jobs:
       - name: Release Helm chart
         run: |
           ansible-playbook ansible/helm-release.yml -v \
-            -e operator_image=quay.io/${{ github.repository }} \
+            -e operator_image=quay.io/chadams/awx-operator \
             -e chart_owner=${{ github.repository_owner }} \
-            -e tag=${{ github.event.release.tag_name }} \
+            -e tag=1.1.3-test \
             -e gh_token=${{ secrets.GITHUB_TOKEN }}
