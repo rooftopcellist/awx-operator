@@ -182,6 +182,10 @@ spec:
             - name: AWX_KUBE_DEVEL
               value: "1"
 {% endif %}
+{% if node_selector %}
+      nodeSelector:
+        {{ web_node_selector | indent(width=8) }}
+{% endif %}
 {% if web_extra_env -%}
             {{ web_extra_env | indent(width=12, first=True) }}
 {% endif %}
