@@ -157,6 +157,9 @@ spec:
               node_selector:
                 description: nodeSelector for the pods
                 type: string
+              web_node_selector:
+                description: web deployment nodeSelector for the pods
+                type: string
               topology_spread_constraints:
                 description: topology rule(s) for the pods
                 type: string

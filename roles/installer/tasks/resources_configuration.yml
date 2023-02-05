@@ -205,6 +205,14 @@
   set_fact:
     _redis_image: "{{ _custom_redis_image | default(lookup('env', 'RELATED_IMAGE_AWX_REDIS')) | default(_default_redis_image, true) }}"
 
+# use default node_selector if set, otherwise use defaults/main.yaml value
+- name: Set web_node_selector value
+  set_fact:
+    web_node_selector: {{ node_selector }}
+  when:
+    - node_selector | default('') | length
+    - web_node_selector is not defined
+
 - name: Apply deployment resources
   k8s:
     apply: yes
