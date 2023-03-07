@@ -1432,3 +1432,48 @@ We welcome your feedback and ideas. The AWX operator uses the same mailing list 
 
 - Join the `#ansible-awx` channel on irc.libera.chat
 - Join the [mailing list](https://groups.google.com/forum/#!forum/awx-project)
+this is the real test for real this time.
+this is the real test for real this time. seriously.
+This time fixing the url and other sha to be just 7 characters
+fixing names
+testing deploy
+and now adding create awx
+and now adding create awx
+and now adding create awx
+and now to quay...
+and now to quay...
+and now to quay...
+and now to quay...
+and now to quay...
+testing slack
+testing slack
+testing slack
+testing urls
+testing urls
+testing urls
+testing template names
+testing template names
+testing template names
+testing template names
+testing template names
+testing template names
+testing template names
+testing template names
+testing template names
+testing template names
+testing template names
+testing template names
+testing template names
+testing template names
+testing template names
+testing template names
+testing template names
+testing template names
+ansible is awesome
+ansible is awesome
+ansible is awesome
+ansible is awesome
+ansible is awesome
+ansible is awesome
+ansible is awesome
+ansible is awesome
