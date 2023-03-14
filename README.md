@@ -1450,4 +1450,14 @@ ansible is awesome
 ansible is awesome
 ansible is awesome
 ansible is awesome
+<<<<<<< HEAD
+ansible is awesome
+ansible is awesome
+ansible is awesome
+ansible is awesome
+ansible is awesome
+ansible is awesome
+=======
 an
+>>>>>>> e983887dc9aec46fd095eaa1ad308ee7967eb136
+ansible is awesome
