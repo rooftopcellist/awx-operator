@@ -22,9 +22,11 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/redhat-user-workloads/aap-pde-tenant/awx-operator:{{revision}}
+    value: <oci-repository-to-push-image-to>:{{revision}}
   - name: dockerfile
     value: Dockerfile
+  - name: path-context
+    value: .
   pipelineSpec:
     description: |
       This pipeline is ideal for building container images from a Containerfile while maintaining trust after pipeline customization.
