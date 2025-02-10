@@ -2014,6 +2014,7 @@ spec:
                 type: string
             type: object
           status:
+            x-kubernetes-preserve-unknown-fields: true
             properties:
               URL:
                 description: URL to access the deployed instance
@@ -2062,5 +2063,6 @@ spec:
                       type: string
                   type: object
                 type: array
+                x-kubernetes-preserve-unknown-fields: true
             type: object
         type: object
