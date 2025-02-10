@@ -51,6 +51,14 @@
   set_fact:
     _default_postgres_image: "{{ _postgres_image }}:{{_postgres_image_version }}"
 
+- name: Fail if PostgreSQL secret is specified, but not found
+  fail:
+    msg: "PostgreSQL configuration {{ postgres_configuration_secret }} not found in namespace {{ ansible_operator_meta.namespace }}"
+  when:
+    - postgres_configuration_secret | length
+    - _custom_pg_config_resources is defined
+    - _custom_pg_config_resources['resources'] | length == 0
+
 - name: Set PostgreSQL configuration
   set_fact:
     _pg_config: '{{ _custom_pg_config_resources["resources"] | default([]) | length | ternary(_custom_pg_config_resources, _default_pg_config_resources) }}'
