@@ -185,7 +185,7 @@ tinycss2==1.2.1
     #   cssselect2
 urllib3==2.2.1
     # via requests
-watchdog==4.0.0
+watchdog==6.0.0
     # via mkdocs
 webencodings==0.5.1
     # via
