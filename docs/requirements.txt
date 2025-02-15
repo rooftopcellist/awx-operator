@@ -171,7 +171,7 @@ requests==2.31.0
     #   linkchecker
     #   mkdocs-htmlproofer-plugin
     #   mkdocs-material
-six==1.16.0
+six==1.17.0
     # via python-dateutil
 soupsieve==2.5
     # via beautifulsoup4
