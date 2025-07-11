@@ -151,6 +151,17 @@
   retries: 60
   when: managed_database
 
+# Check and migrate PostgreSQL password encryption if needed
+- name: Check PostgreSQL password encryption method
+  include_tasks: check_postgres_password_encryption.yml
+  when: managed_database
+
+- name: Migrate PostgreSQL password encryption to SCRAM-SHA-256
+  include_tasks: migrate_postgres_password_encryption.yml
+  when:
+    - managed_database
+    - postgres_needs_password_migration | default(false)
+
 - name: Look up details for this deployment
   k8s_info:
     api_version: "{{ api_version }}"
