@@ -50,8 +50,9 @@ spec:
 {% if postgres_priority_class is defined %}
       priorityClassName: '{{ postgres_priority_class }}'
 {% endif %}
-{% if postgres_data_volume_init and not is_openshift %}
+{% if (postgres_data_volume_init and not is_openshift) or postgres_scram_migration_enabled %}
       initContainers:
+{% if postgres_data_volume_init and not is_openshift %}
         - name: init
           image: '{{ _postgres_image }}'
           imagePullPolicy: '{{ image_pull_policy }}'
@@ -69,6 +70,49 @@ spec:
               subPath: '{{ _postgres_data_path | dirname | basename }}'
 {% if postgres_extra_volume_mounts %}
             {{ postgres_extra_volume_mounts | indent(width=12, first=True) }}
+{% endif %}
+{% endif %}
+{% if postgres_scram_migration_enabled %}
+        - name: scram-init
+          image: '{{ _postgres_image }}'
+          imagePullPolicy: '{{ image_pull_policy }}'
+{% if not is_openshift %}
+          securityContext:
+            runAsUser: 26
+            runAsGroup: 0
+{% endif %}
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: '{{ __postgres_configuration_secret }}'
+                  key: database
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: '{{ __postgres_configuration_secret }}'
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: '{{ __postgres_configuration_secret }}'
+                  key: password
+            - name: PGDATA
+              value: '{{ _postgres_data_path }}'
+          command:
+            - /bin/bash
+            - /scripts/postgres_init_scram.sh
+          volumeMounts:
+            - name: postgres-{{ supported_pg_version }}
+              mountPath: '{{ _postgres_data_path | dirname }}'
+              subPath: '{{ _postgres_data_path | dirname | basename }}'
+            - name: scram-init-scripts
+              mountPath: /scripts
+              readOnly: true
+{% if postgres_extra_volume_mounts %}
+            {{ postgres_extra_volume_mounts | indent(width=12, first=True) }}
+{% endif %}
+          resources: {{ postgres_init_container_resource_requirements | default(postgres_resource_requirements) }}
 {% endif %}
 {% endif %}
       containers:
@@ -149,9 +193,17 @@ spec:
       tolerations:
         {{ postgres_tolerations | indent(width=8) }}
 {% endif %}
-{% if postgres_extra_volumes %}
+{% if postgres_scram_migration_enabled or postgres_extra_volumes %}
       volumes:
+{% if postgres_scram_migration_enabled %}
+        - name: scram-init-scripts
+          configMap:
+            name: '{{ ansible_operator_meta.name }}-postgres-scram-init'
+            defaultMode: 0755
+{% endif %}
+{% if postgres_extra_volumes %}
         {{ postgres_extra_volumes | indent(width=8, first=False) }}
+{% endif %}
 {% endif %}
   volumeClaimTemplates:
     - metadata:

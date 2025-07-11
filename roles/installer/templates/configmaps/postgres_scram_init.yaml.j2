@@ -1,0 +1,12 @@
+# PostgreSQL SCRAM-SHA-256 Initialization ConfigMap
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: '{{ ansible_operator_meta.name }}-postgres-scram-init'
+  namespace: '{{ ansible_operator_meta.namespace }}'
+  labels:
+    {{ lookup("template", "../common/templates/labels/common.yaml.j2") | indent(width=4) | trim }}
+data:
+  postgres_init_scram.sh: |
+    {{ lookup("file", "files/postgres_init_scram.sh") | indent(width=4) | trim }}
