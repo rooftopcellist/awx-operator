@@ -1,0 +1,24 @@
+---
+apiVersion: awx.ansible.com/v1beta1
+kind: AWX
+metadata:
+  name: awx
+spec:
+  service_type: clusterip
+  ingress_type: route
+  no_log: false
+
+  # Secrets
+  admin_password_secret: custom-admin-password
+  postgres_configuration_secret: custom-pg-configuration
+  secret_key_secret: custom-secret-key
+
+  # Resource Requirements
+  postgres_storage_requirements:
+    requests:
+      storage: 10Gi
+
+  # Extra Settings
+  extra_settings:
+    - setting: MAX_PAGE_SIZE
+      value: "500"

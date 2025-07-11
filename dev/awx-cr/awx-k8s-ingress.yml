@@ -1,0 +1,13 @@
+---
+apiVersion: awx.ansible.com/v1beta1
+kind: AWX
+metadata:
+  name: awx
+spec:
+  service_type: nodeport
+  ingress_type: ingress
+
+  # Secrets
+  admin_password_secret: custom-admin-password
+  postgres_configuration_secret: custom-pg-configuration
+  secret_key_secret: custom-secret-key
