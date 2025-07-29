@@ -33,3 +33,15 @@
       when:
         - previous_version is defined
         - previous_version is version_compare(gating_version, '<')
+
+- name: Import auth config when public_url is defined and gating version is defined
+  kubernetes.core.k8s_exec:
+    namespace: "{{ ansible_operator_meta.namespace }}"
+    pod: "{{ awx_web_pod_name }}"
+    container: "{{ ansible_operator_meta.name }}-web"
+    command: >-
+      bash -c "awx-manage import_auth_config_to_gateway"
+  when:
+    - public_base_url is defined
+    - previous_version is defined
+    - previous_version is version_compare(gating_version, '<')
