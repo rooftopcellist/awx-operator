@@ -136,7 +136,7 @@ platformdirs==4.2.0
     # via
     #   mkdocs
     #   mkdocstrings
-pycparser==2.21
+pycparser==2.23
     # via cffi
 pygments==2.17.2
     # via mkdocs-material
