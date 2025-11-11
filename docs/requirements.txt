@@ -70,7 +70,7 @@ markdown==3.5.2
     #   mkdocs-material
     #   mkdocstrings
     #   pymdown-extensions
-markdown-exec==1.8.0
+markdown-exec==1.12.1
     # via mkdocs-ansible
 markdown-include==0.8.1
     # via mkdocs-ansible
