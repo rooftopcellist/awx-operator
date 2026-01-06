@@ -105,6 +105,10 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	- docker buildx build --push $(BUILD_ARGS) --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile .
 	- docker buildx rm project-v3-builder
 
+.PHONY: podman-buildx
+podman-buildx: ## Build and push podman image for the manager for cross-platform support
+	podman build --platform=$(PLATFORMS) $(BUILD_ARGS) --manifest ${IMG} -f Dockerfile .
+	podman manifest push --all ${IMG} ${IMG}
 
 ##@ Deployment
 
