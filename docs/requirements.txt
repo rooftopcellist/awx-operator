@@ -76,7 +76,7 @@ markdown-include==0.8.1
     # via mkdocs-ansible
 markdown2==2.4.12
     # via readtime
-markupsafe==2.1.5
+markupsafe==3.0.3
     # via
     #   jinja2
     #   mkdocs
