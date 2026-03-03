@@ -74,7 +74,7 @@ markdown-exec==1.8.0
     # via mkdocs-ansible
 markdown-include==0.8.1
     # via mkdocs-ansible
-markdown2==2.4.12
+markdown2==2.5.5
     # via readtime
 markupsafe==2.1.5
     # via
