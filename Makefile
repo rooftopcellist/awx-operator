@@ -165,7 +165,7 @@ ifeq (,$(shell which operator-sdk 2>/dev/null))
 	@{ \
 	set -e ;\
 	mkdir -p $(dir $(OPERATOR_SDK)) ;\
-	curl -sSLo $(OPERATOR_SDK) https://github.com/operator-framework/operator-sdk/releases/download/v1.36.1/operator-sdk_$(OS)_$(ARCHA) ;\
+	curl -sSLo $(OPERATOR_SDK) https://github.com/operator-framework/operator-sdk/releases/download/v1.40.0/operator-sdk_$(OS)_$(ARCHA) ;\
 	chmod +x $(OPERATOR_SDK) ;\
 	}
 else
@@ -181,7 +181,7 @@ ifeq (,$(shell which ansible-operator 2>/dev/null))
 	@{ \
 	set -e ;\
 	mkdir -p $(dir $(ANSIBLE_OPERATOR)) ;\
-	curl -sSLo $(ANSIBLE_OPERATOR) https://github.com/operator-framework/ansible-operator-plugins/releases/download/v1.36.1/ansible-operator_$(OS)_$(ARCHA) ;\
+	curl -sSLo $(ANSIBLE_OPERATOR) https://github.com/operator-framework/ansible-operator-plugins/releases/download/v1.40.0/ansible-operator_$(OS)_$(ARCHA) ;\
 	chmod +x $(ANSIBLE_OPERATOR) ;\
 	}
 else
@@ -212,7 +212,7 @@ ifeq (,$(shell which opm 2>/dev/null))
 	@{ \
 	set -e ;\
 	mkdir -p $(dir $(OPM)) ;\
-	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.26.0/$(OS)-$(ARCHA)-opm ;\
+	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.55.0/$(OS)-$(ARCHA)-opm ;\
 	chmod +x $(OPM) ;\
 	}
 else
