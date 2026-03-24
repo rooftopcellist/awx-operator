@@ -42,6 +42,9 @@ backup_resource_requirements:
 # Allow additional parameters to be added to the pg_dump backup command
 pg_dump_suffix: ''
 
+# Enable compression for database dumps (pg_dump -F custom built-in compression)
+use_db_compression: true
+
 # Labels defined on the resource, which should be propagated to child resources
 additional_labels: []
 
