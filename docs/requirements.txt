@@ -41,7 +41,7 @@ dnspython==2.6.1
     # via linkchecker
 ghp-import==2.1.0
     # via mkdocs
-griffe==0.40.1
+griffe==2.0.2
     # via mkdocstrings-python
 htmlmin2==0.1.13
     # via mkdocs-minify-plugin
