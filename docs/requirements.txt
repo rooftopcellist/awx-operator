@@ -140,7 +140,7 @@ pycparser==2.21
     # via cffi
 pygments==2.17.2
     # via mkdocs-material
-pymdown-extensions==10.0.1
+pymdown-extensions==10.21.3
     # via
     #   markdown-exec
     #   mkdocs-ansible
