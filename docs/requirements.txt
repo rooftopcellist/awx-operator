@@ -130,7 +130,7 @@ pillow==10.0.1
     # via
     #   cairosvg
     #   mkdocs-ansible
-pipdeptree==2.7.1
+pipdeptree==2.35.3
     # via mkdocs-ansible
 platformdirs==4.2.0
     # via
