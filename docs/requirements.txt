@@ -21,7 +21,7 @@ cffi==1.16.0
     # via cairocffi
 charset-normalizer==3.3.2
     # via requests
-click==8.1.7
+click==8.4.1
     # via
     #   mkdocs
     #   mkdocstrings
