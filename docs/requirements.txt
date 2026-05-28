@@ -132,7 +132,7 @@ pillow==10.0.1
     #   mkdocs-ansible
 pipdeptree==2.7.1
     # via mkdocs-ansible
-platformdirs==4.2.0
+platformdirs==4.10.0
     # via
     #   mkdocs
     #   mkdocstrings
