@@ -306,11 +306,25 @@ create_preload_data: true
 replicas: 1
 web_replicas: ''
 task_replicas: ''
+web_manage_replicas: true
+task_manage_replicas: true
 
 web_liveness_period: 0
+web_liveness_initial_delay: 5
+web_liveness_failure_threshold: 3
+web_liveness_timeout: 1
 web_readiness_period: 0
+web_readiness_initial_delay: 20
+web_readiness_failure_threshold: 3
+web_readiness_timeout: 1
 task_liveness_period: 0
+task_liveness_initial_delay: 5
+task_liveness_failure_threshold: 3
+task_liveness_timeout: 1
 task_readiness_period: 0
+task_readiness_initial_delay: 20
+task_readiness_failure_threshold: 3
+task_readiness_timeout: 1
 
 task_args:
   - /usr/bin/launch_awx_task.sh
