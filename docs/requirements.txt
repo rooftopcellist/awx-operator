@@ -118,7 +118,7 @@ mkdocstrings==0.24.0
     # via
     #   mkdocs-ansible
     #   mkdocstrings-python
-mkdocstrings-python==1.8.0
+mkdocstrings-python==2.0.4
     # via mkdocs-ansible
 packaging==23.2
     # via mkdocs
