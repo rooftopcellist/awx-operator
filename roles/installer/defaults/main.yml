@@ -1,5 +1,6 @@
 ---
 deployment_type: awx
+deployment_type_shortname: awx
 kind: 'AWX'
 api_version: '{{ deployment_type }}.ansible.com/v1beta1'
 
@@ -305,11 +306,25 @@ create_preload_data: true
 replicas: 1
 web_replicas: ''
 task_replicas: ''
+web_manage_replicas: true
+task_manage_replicas: true
 
 web_liveness_period: 0
+web_liveness_initial_delay: 5
+web_liveness_failure_threshold: 3
+web_liveness_timeout: 1
 web_readiness_period: 0
+web_readiness_initial_delay: 20
+web_readiness_failure_threshold: 3
+web_readiness_timeout: 1
 task_liveness_period: 0
+task_liveness_initial_delay: 5
+task_liveness_failure_threshold: 3
+task_liveness_timeout: 1
 task_readiness_period: 0
+task_readiness_initial_delay: 20
+task_readiness_failure_threshold: 3
+task_readiness_timeout: 1
 
 task_args:
   - /usr/bin/launch_awx_task.sh
@@ -392,9 +407,6 @@ postgres_extra_volume_mounts: ''
 #   kubernetes.io/os: linux
 postgres_selector: ''
 
-# Specify whether or not to keep the old PVC after PostgreSQL upgrades
-postgres_keep_pvc_after_upgrade: True
-
 # Add node tolerations for the Postgres pods.
 # Specify as literal block. E.g.:
 # postgres_tolerations: |
@@ -421,13 +433,19 @@ projects_persistence: false
 # Define an existing PersistentVolumeClaim to use
 projects_existing_claim: ''
 #
-# Define postgres configuration arguments to use
+# Define postgres configuration arguments to use (Deprecated)
 postgres_extra_args: ''
+#
+# Define postgresql.conf configurations
+postgres_extra_settings: []
 
 postgres_data_volume_init: false
 postgres_init_container_commands: |
   chown 26:0 /var/lib/pgsql/data
   chmod 700 /var/lib/pgsql/data
+
+# Enable PostgreSQL SCRAM-SHA-256 migration
+postgres_scram_migration_enabled: true
 
 # Configure postgres connection keepalive
 postgres_keepalives: true
@@ -451,6 +469,12 @@ ldap_password_secret: ''
 
 # Secret to lookup that provides the custom CA trusted bundle
 bundle_cacert_secret: ''
+
+# Proxy environment variables for AWX containers.
+# Values are inherited from the operator pod environment.
+http_proxy: "{{ lookup('env', 'http_proxy') or lookup('env', 'HTTP_PROXY') or '' }}"
+https_proxy: "{{ lookup('env', 'https_proxy') or lookup('env', 'HTTPS_PROXY') or '' }}"
+no_proxy: "{{ lookup('env', 'no_proxy') or lookup('env', 'NO_PROXY') or '' }}"
 
 # Set false for basic install without operator
 update_status: true
@@ -488,7 +512,11 @@ ipv6_disabled: false
 #         - hostname
 host_aliases: ''
 
+# receptor default values
 receptor_log_level: info
+
+# common default values
+client_request_timeout: 30
 
 # UWSGI default values
 uwsgi_processes: 5
@@ -497,11 +525,19 @@ uwsgi_processes: 5
 # Also see https://kubernetes.io/docs/tasks/administer-cluster/sysctl-cluster/#enabling-unsafe-sysctls for how
 # to allow setting this sysctl, which requires kubelet configuration to add to allowlist
 uwsgi_listen_queue_size: 128
+uwsgi_timeout: "{{ (([(client_request_timeout | int), 10] | max) / 3) | int }}"
+uwsgi_timeout_grace_period: 2
+
 
 # NGINX default values
 nginx_worker_processes: 1
 nginx_worker_connections: "{{ uwsgi_listen_queue_size }}"
 nginx_worker_cpu_affinity: 'auto'
 nginx_listen_queue_size: "{{ uwsgi_listen_queue_size }}"
+nginx_client_max_body_size: 5
+nginx_read_timeout: "{{ (([(client_request_timeout | int), 10] | max) / 2) | int }}" # used in nginx config
 
 extra_settings_files: {}
+
+# idle_deployment - Scale down deployments to put AWX into an idle state
+idle_deployment: false

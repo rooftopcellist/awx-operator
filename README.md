@@ -16,9 +16,7 @@ The AWX Operator documentation is available at <https://ansible.readthedocs.io/p
 
 ## Contributing
 
-Please visit [our contributing guidelines](https://github.com/ansible/awx-operator/blob/devel/CONTRIBUTING.md).
-
-For docs changes, create PRs on the appropriate files in the `/docs` folder.
+Please visit our [contributing guidelines](https://github.com/ansible/awx-operator/blob/devel/CONTRIBUTING.md) and [development guide](https://github.com/ansible/awx-operator/blob/devel/docs/development.md) for information on how to set up your environment, build and deploy the operator, and submit changes.
 
 ## Author
 

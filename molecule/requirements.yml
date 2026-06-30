@@ -4,4 +4,6 @@ collections:
   - name: kubernetes.core
   - name: operator_sdk.util
   - name: community.docker
-  - name: awx.awx
+  - name: https://github.com/ansible/awx.git#/awx_collection/
+    type: git
+    version: devel

@@ -36,6 +36,17 @@ spec:
           metadata:
             type: object
           spec:
+            x-kubernetes-validations:
+            - rule: "has(self.image) && has(self.image_version) || !has(self.image) && !has(self.image_version)"
+              message: "Both image and image_version must be set when required"
+            - rule: "has(self.redis_image) && has(self.redis_image_version) || !has(self.redis_image) && !has(self.redis_image_version)"
+              message: "Both redis_image and redis_image_version must be set when required"
+            - rule: "has(self.postgres_image) && has(self.postgres_image_version) || !has(self.postgres_image) && !has(self.postgres_image_version)"
+              message: "Both postgres_image and postgres_image_version must be set when required"
+            - rule: >-
+                has(self.metrics_utility_image) && has(self.metrics_utility_image_version) ||
+                !has(self.metrics_utility_image) && !has(self.metrics_utility_image_version)
+              message: "Both metrics_utility_image and metrics_utility_image_version must be set when required"
             properties:
               deployment_type:
                 description: Name of the deployment type
@@ -1736,6 +1747,9 @@ spec:
               nginx_worker_connections:
                 description: Set the number of connections per worker for nginx
                 type: integer
+              nginx_client_max_body_size:
+                description: Sets the maximum allowed size of the client request body in megabytes (defaults to 5M)
+                type: integer
               nginx_worker_cpu_affinity:
                 description: Set the CPU affinity for nginx workers
                 type: string
@@ -1781,7 +1795,7 @@ spec:
                 description: nodeSelector for the Postgres pods
                 type: string
               postgres_keep_pvc_after_upgrade:
-                description: Specify whether or not to keep the old PVC after PostgreSQL upgrades
+                description: "(Deprecated) Specify whether or not to keep the old PVC after PostgreSQL upgrades"
                 type: boolean
               postgres_tolerations:
                 description: node tolerations for the Postgres pods
@@ -1825,9 +1839,25 @@ spec:
                 description: Assign a preexisting priority class to the postgres pod
                 type: string
               postgres_extra_args:
+                description: "(Deprecated, use postgres_extra_settings parameter) Define postgres configuration arguments to use"
                 type: array
                 items:
                   type: string
+              postgres_extra_settings:
+                description: "PostgreSQL configuration settings to be added to postgresql.conf"
+                type: array
+                items:
+                  type: object
+                  properties:
+                    setting:
+                      description: "PostgreSQL configuration parameter name"
+                      type: string
+                    value:
+                      description: "PostgreSQL configuration parameter value"
+                      type: string
+                  required:
+                  - setting
+                  - value
               postgres_data_volume_init:
                 description: Sets permissions on the /var/lib/pgdata/data for postgres container using an init container (not Openshift)
                 type: boolean
@@ -1965,6 +1995,9 @@ spec:
                 description: Disable web container's nginx ipv6 listener
                 type: boolean
                 default: false
+              idle_deployment:
+                description: Scale down deployments to put AWX into an idle state
+                type: boolean
               metrics_utility_enabled:
                 description: Enable metrics utility
                 type: boolean
@@ -2012,9 +2045,9 @@ spec:
               public_base_url:
                 description: Public base URL
                 type: string
-                default: ''
             type: object
           status:
+            x-kubernetes-preserve-unknown-fields: true
             properties:
               URL:
                 description: URL to access the deployed instance
@@ -2063,5 +2096,6 @@ spec:
                       type: string
                   type: object
                 type: array
+                x-kubernetes-preserve-unknown-fields: true
             type: object
         type: object

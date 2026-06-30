@@ -50,6 +50,12 @@ spec:
         path: ingress_annotations
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:text
+      - displayName: Route Annotations
+        path: route_annotations
+        x-descriptors:
+          - 'urn:alm:descriptor:com.tectonic.ui:advanced'
+          - 'urn:alm:descriptor:com.tectonic.ui:text'
+          - 'urn:alm:descriptor:com.tectonic.ui:fieldDependency:ingress_type:Route'
       - displayName: Ingress Class Name
         path: ingress_class_name
         x-descriptors:
@@ -149,6 +155,11 @@ spec:
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:advanced
         - urn:alm:descriptor:com.tectonic.ui:hidden
+      - displayName: Skip PostgreSQL database dump
+        path: postgres_skip_data
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
       - displayName: Image Pull Policy
         path: image_pull_policy
         x-descriptors:
@@ -169,6 +180,12 @@ spec:
         path: additional_labels
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Enable compression for database dumps using pg_dump built-in compression
+        displayName: Use DB Compression
+        path: use_db_compression
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
       - displayName: Node Selector for backup management pod
         path: db_management_pod_node_selector
         x-descriptors:
@@ -244,6 +261,11 @@ spec:
         path: postgres_image_version
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:hidden
+      - displayName: Skip PostgreSQL database restore
+        path: postgres_skip_data
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
       - displayName: AWX Spec Overrides
         path: spec_overrides
         x-descriptors:
@@ -584,6 +606,11 @@ spec:
         - urn:alm:descriptor:com.tectonic.ui:advanced
         - urn:alm:descriptor:com.tectonic.ui:number
         - urn:alm:descriptor:com.tectonic.ui:hidden
+      - displayName: Set the maximum allowed size of the client request body in megabytes for nginx
+        path: nginx_client_max_body_size
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+        - urn:alm:descriptor:com.tectonic.ui:number
       - displayName: Task Replicas
         path: task_replicas
         x-descriptors:
@@ -671,11 +698,6 @@ spec:
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:advanced
         - urn:alm:descriptor:com.tectonic.ui:hidden
-      - displayName: Should PostgreSQL data for managed databases be kept after upgrades?
-        path: postgres_keep_pvc_after_upgrade
-        x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
-        - urn:alm:descriptor:com.tectonic.ui:hidden
       - displayName: Postgres Tolerations
         path: postgres_tolerations
         x-descriptors:
@@ -686,8 +708,13 @@ spec:
         x-descriptors:
         - urn:alm:descriptor:io.kubernetes:StorageClass
         - urn:alm:descriptor:com.tectonic.ui:advanced
-      - displayName: Postgres Extra Arguments
+      - displayName: Postgres Extra Arguments (Deprecated)
         path: postgres_extra_args
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - displayName: Postgres Extra Settings
+        path: postgres_extra_settings
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:advanced
         - urn:alm:descriptor:com.tectonic.ui:hidden
@@ -1155,6 +1182,13 @@ spec:
         - urn:alm:descriptor:com.tectonic.ui:advanced
         - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
         - urn:alm:descriptor:com.tectonic.ui:fieldDependency:metrics_utility_enabled:true
+      - description: Scale down deployments to put AWX into an idle state
+        displayName: Idle AWX
+        path: idle_deployment
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        - urn:alm:descriptor:com.tectonic.ui:hidden
       statusDescriptors:
       - description: Route to access the instance deployed
         displayName: URL
