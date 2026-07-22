@@ -50,6 +50,13 @@
     definition: "{{ lookup('template', 'configmaps/redirect-page.configmap.html.j2') }}"
   when: public_base_url is defined
 
+- name: Set gateway hostname for NO_PROXY exclusion
+  ansible.builtin.set_fact:
+    _gateway_hostname: >-
+      {{ extra_settings | default([]) | selectattr('setting', 'equalto', 'RESOURCE_SERVER')
+         | map(attribute='value') | map(attribute='URL') | select | list | first | default('')
+         | urlsplit('hostname') }}
+
 - name: Apply proxy environment ConfigMap
   k8s:
     apply: true
