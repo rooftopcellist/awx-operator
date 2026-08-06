@@ -154,7 +154,7 @@ python-dateutil==2.8.2
     #   mkdocs-macros-plugin
 python-slugify==8.0.4
     # via mkdocs-monorepo-plugin
-pyyaml==6.0.1
+pyyaml==6.0.3
     # via
     #   mkdocs
     #   mkdocs-macros-plugin
