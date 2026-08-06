@@ -6,7 +6,7 @@
 #
 babel==2.14.0
     # via mkdocs-material
-beautifulsoup4==4.12.3
+beautifulsoup4==4.14.3
     # via
     #   linkchecker
     #   mkdocs-htmlproofer-plugin
