@@ -465,7 +465,8 @@ spec:
       optional: true
     - name: netrc
       optional: true
-  taskRunTemplate: {}
+  taskRunTemplate:
+    serviceAccountName: build-pipeline-awx-operator
   workspaces:
   - name: git-auth
     secret:
