@@ -4,7 +4,7 @@
 #
 #    pip-compile --allow-unsafe --output-file=docs/requirements.txt --strip-extras docs/requirements.in
 #
-babel==2.14.0
+babel==2.18.0
     # via mkdocs-material
 beautifulsoup4==4.12.3
     # via
