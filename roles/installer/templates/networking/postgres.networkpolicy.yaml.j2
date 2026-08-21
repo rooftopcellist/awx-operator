@@ -1,0 +1,73 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: '{{ ansible_operator_meta.name }}-postgres-{{ supported_pg_version }}'
+  namespace: '{{ ansible_operator_meta.namespace }}'
+  labels:
+    app.kubernetes.io/name: 'postgres-{{ supported_pg_version }}'
+    app.kubernetes.io/instance: 'postgres-{{ supported_pg_version }}-{{ ansible_operator_meta.name }}'
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: '{{ ansible_operator_meta.name }}'
+    app.kubernetes.io/managed-by: '{{ deployment_type }}-operator'
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: 'postgres-{{ supported_pg_version }}'
+      app.kubernetes.io/instance: 'postgres-{{ supported_pg_version }}-{{ ansible_operator_meta.name }}'
+      app.kubernetes.io/component: database
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow connections from this AWX instance's operand pods (web, task,
+    # migration jobs, backup/restore) and the operator controller-manager.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/managed-by: '{{ deployment_type }}-operator'
+              app.kubernetes.io/part-of: '{{ ansible_operator_meta.name }}'
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/managed-by: '{{ deployment_type }}-operator'
+              control-plane: controller-manager
+      ports:
+        - protocol: TCP
+          port: {{ awx_postgres_port | default('5432') }}
+{% if backup_pvc_namespace | default(ansible_operator_meta.namespace) != ansible_operator_meta.namespace %}
+    # Allow connections from backup/restore management pods running in a
+    # different namespace (backup_pvc_namespace).
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: '{{ backup_pvc_namespace }}'
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/managed-by: '{{ deployment_type }}-operator'
+      ports:
+        - protocol: TCP
+          port: {{ awx_postgres_port | default('5432') }}
+{% endif %}
+  egress:
+    # Allow DNS resolution (port 53 for vanilla k8s / Kind, port 5353 for
+    # OpenShift DNS).
+    - ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 5353
+        - protocol: UDP
+          port: 5353
+    # Allow egress to other postgres pods on the database port.
+    # Required for pg_dump during major-version upgrades
+    # (upgrade_postgres.yml streams data from old to new pod).
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: database
+              app.kubernetes.io/managed-by: '{{ deployment_type }}-operator'
+      ports:
+        - protocol: TCP
+          port: {{ awx_postgres_port | default('5432') }}

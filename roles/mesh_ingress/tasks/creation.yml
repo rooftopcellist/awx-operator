@@ -63,6 +63,9 @@
     ingress_type: route
   when: is_openshift | bool and ingress_type | lower == 'none'
 
+- name: Apply NetworkPolicy for mesh-ingress
+  include_tasks: networkpolicy.yml
+
 - name: Apply Ingress resource
   k8s:
     apply: yes
