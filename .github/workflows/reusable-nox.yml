@@ -21,6 +21,21 @@ jobs:
           uses: wntrblm/nox@2024.04.15
           with:
               python-versions: "${{ matrix.python-versions }}"
+        - name: Get current date
+          if: matrix.session == 'build'
+          id: date
+          run: echo "date=$(date +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
+        - name: Cache mkdocstrings inventory downloads
+          if: matrix.session == 'build'
+          uses: actions/cache@v4
+          with:
+              path: ~/.cache/mkdocs
+              # mkdocs caches downloaded inventories (e.g. the Ansible docs
+              # objects.inv) for 1 day; a per-day cache key keeps CI from
+              # re-fetching them on every run and hitting rate limits.
+              key: mkdocs-inventory-${{ steps.date.outputs.date }}
+              restore-keys: |
+                mkdocs-inventory-
         - name: "Run nox -s ${{ matrix.session }}"
           run: |
             nox -s "${{ matrix.session }}"

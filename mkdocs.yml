@@ -4,7 +4,10 @@ site_url: https://awx-operator.readthedocs.io/
 repo_url: https://github.com/ansible/awx-operator
 edit_uri: blob/devel/docs/
 docs_dir: docs
-strict: true
+# Not "strict: true" here: Read the Docs invokes `mkdocs build` directly
+# (see .readthedocs.yaml) with no retry/fallback for the known
+# docs.ansible.com inventory rate-limiting issue that noxfile.py handles
+# for the GitHub Actions build, which passes --strict explicitly.
 use_directory_urls: false
 
 theme:
