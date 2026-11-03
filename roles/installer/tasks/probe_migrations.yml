@@ -1,0 +1,125 @@
+---
+- name: Reset the migration probe state
+  ansible.builtin.set_fact:
+    migration_probe_pod: ''
+    migration_plan: ''
+
+- name: Find running web Pods for the migration probe
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ ansible_operator_meta.namespace }}"
+    label_selectors:
+      - "app.kubernetes.io/name={{ ansible_operator_meta.name }}-web"
+      - "app.kubernetes.io/managed-by={{ deployment_type }}-operator"
+      - "app.kubernetes.io/component={{ deployment_type }}"
+    field_selectors:
+      - status.phase=Running
+  register: migration_web_pods
+
+- name: Select a running web container with the desired image
+  ansible.builtin.set_fact:
+    migration_probe_pod: "{{ item.metadata.name }}"
+  loop: "{{ migration_web_pods.resources }}"
+  loop_control:
+    label: "{{ item.metadata.name }}"
+  when:
+    - item.metadata.deletionTimestamp is not defined
+    - >-
+      (item.spec.containers | selectattr('name', 'equalto', ansible_operator_meta.name + '-web')
+       | selectattr('image', 'equalto', _image) | list | length) > 0
+    - >-
+      (item.status.containerStatuses | default([]) | selectattr('name', 'equalto', ansible_operator_meta.name + '-web')
+       | selectattr('state.running', 'defined') | list | length) > 0
+
+- name: Check live migration state in the desired web image
+  kubernetes.core.k8s_exec:
+    namespace: "{{ ansible_operator_meta.namespace }}"
+    pod: "{{ migration_probe_pod }}"
+    container: "{{ ansible_operator_meta.name }}-web"
+    command: awx-manage showmigrations --plan --no-color
+  register: migration_web_probe
+  changed_when: false
+  when: migration_probe_pod != ''
+
+- name: Record the web migration plan
+  ansible.builtin.set_fact:
+    migration_plan: "{{ migration_web_probe.stdout }}"
+  when: migration_probe_pod != ''
+
+- name: Check migration state in a target-image Job when no matching web Pod exists
+  when: migration_probe_pod == ''
+  block:
+    - name: Create a target-image migration check Job
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('template', 'jobs/migration.yaml.j2') }}"
+      vars:
+        migration_job_is_check: true
+      register: migration_check_job
+
+    - name: Wait for the migration check Job to finish
+      kubernetes.core.k8s_info:
+        api_version: batch/v1
+        kind: Job
+        namespace: "{{ ansible_operator_meta.namespace }}"
+        name: "{{ migration_check_job.result.metadata.name }}"
+      register: migration_check_watch
+      until:
+        - migration_check_watch.resources | length > 0
+        - >-
+          (migration_check_watch.resources[0].status.succeeded | default(0) | int) == 1 or
+          (migration_check_watch.resources[0].status.conditions | default([])
+           | selectattr('type', 'equalto', 'Failed') | selectattr('status', 'equalto', 'True') | list | length) > 0
+      retries: 180
+      delay: 5
+
+    - name: Require a successful migration check Job
+      ansible.builtin.assert:
+        that:
+          - (migration_check_watch.resources[0].status.succeeded | default(0) | int) == 1
+        fail_msg: "Migration check failed; inspect Job {{ migration_check_job.result.metadata.name }} and its logs."
+
+    - name: Find the migration check Pod
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: "{{ ansible_operator_meta.namespace }}"
+        label_selectors:
+          - "job-name={{ migration_check_job.result.metadata.name }}"
+        field_selectors:
+          - status.phase=Succeeded
+      register: migration_check_pods
+
+    - name: Read the migration check plan
+      kubernetes.core.k8s_log:
+        namespace: "{{ ansible_operator_meta.namespace }}"
+        name: "{{ migration_check_pods.resources[0].metadata.name }}"
+        container: migration-job
+      register: migration_check_log
+
+    - name: Record the target-image migration plan
+      ansible.builtin.set_fact:
+        migration_plan: "{{ migration_check_log.log }}"
+
+# Do not turn an empty/unrecognized response into a zero-pending decision.
+# --no-color gives Django's stable [X] / [ ] plan markers without ANSI escapes.
+- name: Require a conclusive migration plan
+  ansible.builtin.assert:
+    that:
+      - migration_plan is search('(?m)^\[(X| )\]\s+\S+')
+    fail_msg: "Migration state probe returned no recognizable plan; refusing to reuse a successful migration Job."
+
+- name: Determine whether the live database has pending migrations
+  ansible.builtin.set_fact:
+    migration_pending: >-
+      {{ migration_plan is search('(?m)^\[ \]\s+\S+') }}
+
+- name: Remove the successful temporary migration check Job
+  kubernetes.core.k8s:
+    api_version: batch/v1
+    kind: Job
+    namespace: "{{ ansible_operator_meta.namespace }}"
+    name: "{{ migration_check_job.result.metadata.name }}"
+    state: absent
+  when: migration_probe_pod == ''

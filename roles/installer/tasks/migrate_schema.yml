@@ -1,113 +1,129 @@
 ---
-
-# Kubernetes stamps a Job's own name onto its Pods as the job-name /
-# batch.kubernetes.io/job-name label, and label values are capped at 63
-# characters - that is the real ceiling for the whole name below, not the
-# usual 253-character object name limit. The suffix is a short hash of the
-# full instance name and target image rather than the awx-manage version
-# string. Including the full name keeps truncated prefixes distinct. The hash changes
-# whenever the image actually changes (unlike a version string that can
-# repeat across builds), so "a Job with this name succeeded" reliably means
-# "migrations for this exact image were already run".
-- name: Compute a collision-safe migration Job name from the target image
+# Preserve #2143's identity for the first attempt, including pre-label Jobs.
+# Kubernetes also uses the Job name as a Pod label (63 characters maximum).
+- name: Compute the migration identity for the target image
   ansible.builtin.set_fact:
-    migration_job_name: >-
-      {{ ansible_operator_meta.name[:42] }}-migration-{{ ([ansible_operator_meta.name, _image] | to_json | hash('sha256'))[:10] }}
+    migration_image_hash: "{{ ([ansible_operator_meta.name, _image] | to_json | hash('sha256'))[:10] }}"
     migration_confirmed: false
-  when: awx_web_pod_name != ''
+    migration_existing_job: {}
+    migration_successful_job: {}
+    migration_pending: false
 
-- block:
-    - name: Look up any existing migration Job for this image
-      k8s_info:
-        api_version: batch/v1
-        kind: Job
-        namespace: "{{ ansible_operator_meta.namespace }}"
-        name: "{{ migration_job_name }}"
-      register: existing_migration_job
+- name: Compute the original migration Job name
+  ansible.builtin.set_fact:
+    migration_job_name: "{{ ansible_operator_meta.name[:42] }}-migration-{{ migration_image_hash }}"
 
-    # Job spec.template is immutable, so an existing Job for this name can
-    # never be safely re-applied - it can only be left alone or deleted and
-    # recreated. Only a terminally failed Job is eligible for replacement.
-    # Failed Pod attempts or a temporarily inactive Job can still be retried
-    # by the Job controller; leave those Jobs intact and wait for completion.
-    - name: Determine whether the existing migration Job is terminally failed
-      ansible.builtin.set_fact:
-        migration_job_is_dead: >-
-          {{ existing_migration_job.resources | default([]) | length > 0 and
-             (existing_migration_job.resources[0].status.active | default(0) | int) == 0 and
-             (existing_migration_job.resources[0].status.conditions | default([])
-              | selectattr('type', 'equalto', 'Failed')
-              | selectattr('status', 'equalto', 'True') | list | length) > 0 }}
+- name: Look up the original migration Job for this image
+  kubernetes.core.k8s_info:
+    api_version: batch/v1
+    kind: Job
+    namespace: "{{ ansible_operator_meta.namespace }}"
+    name: "{{ migration_job_name }}"
+  register: original_migration_job
 
-    - name: Delete a terminally failed migration Job
-      k8s:
-        api_version: batch/v1
-        kind: Job
-        namespace: "{{ ansible_operator_meta.namespace }}"
-        name: "{{ migration_job_name }}"
-        state: absent
-      when: migration_job_is_dead | bool
+- name: Find migration attempts for this instance and image
+  kubernetes.core.k8s_info:
+    api_version: batch/v1
+    kind: Job
+    namespace: "{{ ansible_operator_meta.namespace }}"
+    label_selectors:
+      - "app.kubernetes.io/part-of={{ ansible_operator_meta.name }}"
+      - "awx.ansible.com/migration-image={{ migration_image_hash }}"
+  register: migration_attempts
 
-    # Django applies pending migrations using the Job's own (new) image
-    # and exits successfully when none are pending. That removes
-    # any dependency on exec-ing into a possibly still-running old pod to
-    # decide whether migrations are needed. ignore_errors here covers the
-    # rare case of a concurrent reconcile recreating the Job between the
-    # lookup above and this apply; that shows up as a failure on this pass
-    # and self-heals on the next one, once the existence check above sees
-    # the (now real) Job's status.
-    - name: Create kubernetes job to perform the migration
-      k8s:
-        apply: yes
-        definition: "{{ lookup('template', 'jobs/migration.yaml.j2') }}"
-      register: migrate_result
-      ignore_errors: true
-      when: >-
-        existing_migration_job.resources | default([]) | length == 0
-        or migration_job_is_dead
+- name: Combine original and labeled migration attempts
+  ansible.builtin.set_fact:
+    migration_jobs: >-
+      {{ (original_migration_job.resources + migration_attempts.resources)
+         | unique(attribute='metadata.name') | sort(attribute='metadata.creationTimestamp') }}
 
-    # Wait for existing active Jobs as well as newly created Jobs. Skipping
-    # creation does not imply that migration has successfully completed.
-    - name: Watch for the migration job to finish
-      kubernetes.core.k8s_info:
-        api_version: batch/v1
-        kind: Job
-        namespace: "{{ ansible_operator_meta.namespace }}"
-        name: "{{ migration_job_name }}"
-      register: migrate_watch_result
-      until:
-        - (migrate_watch_result.resources | default([]) | length) > 0
-        - (migrate_watch_result.resources[0].status.succeeded | default(0) | int) == 1
-      retries: 180
-      delay: 5
-      ignore_errors: true
-      when: migrate_result is not failed
+# A failed Pod or temporarily inactive Job can still be retried by Kubernetes.
+# Prefer an unfinished attempt to historical success; never reapply its template.
+- name: Select an unfinished migration attempt
+  ansible.builtin.set_fact:
+    migration_existing_job: "{{ item }}"
+  loop: "{{ migration_jobs }}"
+  loop_control:
+    label: "{{ item.metadata.name }}"
+  when:
+    - migration_existing_job | length == 0
+    - (item.status.succeeded | default(0) | int) == 0
+    - >-
+      (item.status.active | default(0) | int) > 0 or
+      (item.status.conditions | default([]) | selectattr('type', 'equalto', 'Failed')
+       | selectattr('status', 'equalto', 'True') | list | length) == 0
 
-    # Consumed by update_status.yml so status.image/status.version are only
-    # stamped once migration for this image is actually confirmed, instead
-    # of unconditionally at the end of the reconcile.
-    - name: Record whether the migration for this image is confirmed successful
-      ansible.builtin.set_fact:
-        migration_confirmed: >-
-          {{ migrate_watch_result is succeeded and
-             not (migrate_watch_result.skipped | default(false) | bool) and
-             (migrate_watch_result.resources | default([]) | length) > 0 and
-             (migrate_watch_result.resources[0].status.succeeded | default(0) | int) == 1 }}
+- name: Select the latest successful migration attempt
+  ansible.builtin.set_fact:
+    migration_successful_job: "{{ item }}"
+  loop: "{{ migration_jobs }}"
+  loop_control:
+    label: "{{ item.metadata.name }}"
+  when: (item.status.succeeded | default(0) | int) == 1
 
-    - name: Stop reconciliation when the migration is not confirmed successful
-      ansible.builtin.fail:
-        msg: >-
-          Migration Job {{ migration_job_name }} was not confirmed successful.
-          Refusing to continue Django initialization; inspect the Job and its
-          Pod logs before retrying reconciliation.
-      when: not migration_confirmed | bool
+# Success only describes the database at the time the Job ran. A subsequent
+# pg_restore can roll it back without replacing any application Pods.
+- name: Verify live database state before reusing a successful migration Job
+  ansible.builtin.include_tasks: probe_migrations.yml
+  when:
+    - migration_existing_job | length == 0
+    - migration_successful_job | length > 0
 
-    - name: Report migration Job outcome
-      ansible.builtin.debug:
-        msg: >-
-          migration Job {{ migration_job_name }}:
-          {{ migration_confirmed | bool | ternary(
-               'confirmed successful',
-               'not confirmed successful - see migrate_result/migrate_watch_result for details') }}
+- name: Reuse successful migration history when no migrations are pending
+  ansible.builtin.set_fact:
+    migration_existing_job: "{{ migration_successful_job }}"
+  when:
+    - migration_existing_job | length == 0
+    - migration_successful_job | length > 0
+    - not migration_pending | bool
 
-  when: awx_web_pod_name != ''
+- name: Wait for the selected migration attempt
+  ansible.builtin.set_fact:
+    migration_job_name: "{{ migration_existing_job.metadata.name }}"
+  when: migration_existing_job | length > 0
+
+# New images retain the direct target-image migration path. Recovery attempts
+# use generateName, leaving successful and terminally failed Jobs/logs intact.
+- name: Create a migration attempt when none can be reused
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'jobs/migration.yaml.j2') }}"
+  vars:
+    migration_job_generate_name: "{{ migration_jobs | length > 0 }}"
+  register: migrate_result
+  when: migration_existing_job | length == 0
+
+- name: Record the generated migration attempt name
+  ansible.builtin.set_fact:
+    migration_job_name: "{{ migrate_result.result.metadata.name }}"
+  when: migration_existing_job | length == 0
+
+- name: Watch for the migration job to finish
+  kubernetes.core.k8s_info:
+    api_version: batch/v1
+    kind: Job
+    namespace: "{{ ansible_operator_meta.namespace }}"
+    name: "{{ migration_job_name }}"
+  register: migrate_watch_result
+  until:
+    - (migrate_watch_result.resources | default([]) | length) > 0
+    - (migrate_watch_result.resources[0].status.succeeded | default(0) | int) == 1
+  retries: 180
+  delay: 5
+  ignore_errors: true
+
+# Consumed by update_status.yml; failures above also stop Django initialization.
+- name: Record whether the migration for this image is confirmed successful
+  ansible.builtin.set_fact:
+    migration_confirmed: >-
+      {{ migrate_watch_result is succeeded and
+         (migrate_watch_result.resources | default([]) | length) > 0 and
+         (migrate_watch_result.resources[0].status.succeeded | default(0) | int) == 1 }}
+
+- name: Stop reconciliation when the migration is not confirmed successful
+  ansible.builtin.fail:
+    msg: >-
+      Migration Job {{ migration_job_name }} was not confirmed successful.
+      Refusing to continue Django initialization; inspect the Job and its
+      Pod logs before retrying reconciliation.
+  when: not migration_confirmed | bool

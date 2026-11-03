@@ -1,11 +1,20 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
+{% if migration_job_is_check | default(false) | bool %}
+  generateName: '{{ ansible_operator_meta.name[:24] }}-migration-check-{{ migration_image_hash }}-'
+{% elif migration_job_generate_name | default(false) | bool %}
+  generateName: '{{ ansible_operator_meta.name[:30] }}-migration-{{ migration_image_hash }}-'
+{% else %}
   name: '{{ migration_job_name }}'
+{% endif %}
   namespace: '{{ ansible_operator_meta.namespace }}'
   labels:
     {{ lookup("template", "../common/templates/labels/common.yaml.j2")  | indent(width=4) | trim }}
     {{ lookup("template", "../common/templates/labels/version.yaml.j2") | indent(width=4) | trim }}
+{% if not migration_job_is_check | default(false) | bool %}
+    awx.ansible.com/migration-image: '{{ migration_image_hash }}'
+{% endif %}
 spec:
   template:
     metadata:
@@ -39,9 +48,16 @@ spec:
           image: '{{ _image }}'
           resources: {{ task_resource_requirements }}
           command:
+{% if migration_job_is_check | default(false) | bool %}
+            - awx-manage
+            - showmigrations
+            - --plan
+            - --no-color
+{% else %}
             - awx-manage
             - migrate
             - --noinput
+{% endif %}
           volumeMounts:
             - name: {{ ansible_operator_meta.name }}-application-credentials
               mountPath: "/etc/tower/conf.d/credentials.py"
