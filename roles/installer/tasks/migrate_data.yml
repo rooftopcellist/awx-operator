@@ -13,24 +13,36 @@
     awx_old_postgres_host: "{{ old_pg_config['resources'][0]['data']['host'] | b64decode }}"
   no_log: "{{ no_log }}"
 
-- name: Set Default label selector for custom resource generated postgres
-  set_fact:
-    postgres_label_selector: "app.kubernetes.io/instance=postgres-{{ supported_pg_version }}-{{ ansible_operator_meta.name }}"
-  when: postgres_label_selector is not defined
+- name: Reject identical source and target databases
+  ansible.builtin.assert:
+    that:
+      - >-
+        awx_old_postgres_host != awx_postgres_host or
+        awx_old_postgres_port != awx_postgres_port or
+        awx_old_postgres_database != awx_postgres_database
+    fail_msg: Source and target must be different databases
 
-- name: Get the postgres pod information
-  k8s_info:
-    kind: Pod
-    namespace: "{{ ansible_operator_meta.namespace }}"
-    label_selectors:
-      - "{{ postgres_label_selector }}"
-    field_selectors:
-      - status.phase=Running
-  register: postgres_pod
+- name: Discover the managed target PostgreSQL pod
+  when: managed_database | bool
+  block:
+    - name: Set Default label selector for custom resource generated postgres
+      set_fact:
+        postgres_label_selector: "app.kubernetes.io/instance=postgres-{{ supported_pg_version }}-{{ ansible_operator_meta.name }}"
+      when: postgres_label_selector is not defined
 
-- name: Set the resource pod name as a variable.
-  set_fact:
-    postgres_pod_name: "{{ postgres_pod['resources'][0]['metadata']['name'] }}"
+    - name: Get the postgres pod information
+      k8s_info:
+        kind: Pod
+        namespace: "{{ ansible_operator_meta.namespace }}"
+        label_selectors:
+          - "{{ postgres_label_selector }}"
+        field_selectors:
+          - status.phase=Running
+      register: postgres_pod
+
+    - name: Set the resource pod name as a variable.
+      set_fact:
+        postgres_pod_name: "{{ postgres_pod['resources'][0]['metadata']['name'] }}"
 
 - name: Scale down Deployment for migration
   include_tasks: scale_down_deployment.yml
@@ -39,10 +51,10 @@
   set_fact:
     pgdump: >-
       pg_dump
-      -h {{ awx_old_postgres_host }}
-      -U {{ awx_old_postgres_user }}
-      -d {{ awx_old_postgres_database }}
-      -p {{ awx_old_postgres_port }}
+      -h {{ (awx_old_postgres_host | quote) if managed_database | bool else '"$SOURCE_PGHOST"' }}
+      -U {{ (awx_old_postgres_user | quote) if managed_database | bool else '"$SOURCE_PGUSER"' }}
+      -d {{ (awx_old_postgres_database | quote) if managed_database | bool else '"$SOURCE_PGDATABASE"' }}
+      -p {{ (awx_old_postgres_port | quote) if managed_database | bool else '"$SOURCE_PGPORT"' }}
       -F custom
       {{ pg_dump_suffix }}
   no_log: "{{ no_log }}"
@@ -54,38 +66,70 @@
       -U {{ database_username }}
       -d {{ database_name }}
   no_log: "{{ no_log }}"
+  when: managed_database | bool
 
-- name: Stream backup from pg_dump to the new postgresql container
-  k8s_exec:
-    namespace: "{{ ansible_operator_meta.namespace }}"
-    pod: "{{ postgres_pod_name }}"
-    command: |
-      bash -c "
-      function end_keepalive {
-        rc=$?
-        rm -f \"$1\"
-        kill $(cat /proc/$2/task/$2/children 2>/dev/null) 2>/dev/null || true
-        wait $2 || true
-        exit $rc
-      }
-      keepalive_file=\"$(mktemp)\"
-      while [[ -f \"$keepalive_file\" ]]; do
-        echo 'Migrating data from old database...'
-        sleep 60
-      done &
-      keepalive_pid=$!
-      trap 'end_keepalive \"$keepalive_file\" \"$keepalive_pid\"' EXIT SIGINT SIGTERM
-      echo keepalive_pid: $keepalive_pid
-      set -e -o pipefail
-      psql -c 'GRANT postgres TO {{ awx_postgres_user }}'
-      PGPASSWORD=\"$PGPASSWORD_OLD\" {{ pgdump }} | PGPASSWORD=\"$POSTGRES_PASSWORD\" {{ pg_restore }}
-      psql -c 'REVOKE postgres FROM {{ awx_postgres_user }}'
-      set +e +o pipefail
-      echo 'Successful'
-      "
-  no_log: "{{ no_log }}"
-  register: data_migration
+- name: Transfer data and record completion
+  block:
+    - name: Stream backup from pg_dump to the new postgresql container
+      k8s_exec:
+        namespace: "{{ ansible_operator_meta.namespace }}"
+        pod: "{{ postgres_pod_name }}"
+        command: |
+          bash -c "
+          function end_keepalive {
+            rc=$?
+            rm -f \"$1\"
+            kill $(cat /proc/$2/task/$2/children 2>/dev/null) 2>/dev/null || true
+            wait $2 || true
+            exit $rc
+          }
+          keepalive_file=\"$(mktemp)\"
+          while [[ -f \"$keepalive_file\" ]]; do
+            echo 'Migrating data from old database...'
+            sleep 60
+          done &
+          keepalive_pid=$!
+          trap 'end_keepalive \"$keepalive_file\" \"$keepalive_pid\"' EXIT SIGINT SIGTERM
+          echo keepalive_pid: $keepalive_pid
+          set -e -o pipefail
+          psql -c 'GRANT postgres TO {{ awx_postgres_user }}'
+          PGPASSWORD=\"$PGPASSWORD_OLD\" {{ pgdump }} | PGPASSWORD=\"$POSTGRES_PASSWORD\" {{ pg_restore }}
+          psql -c 'REVOKE postgres FROM {{ awx_postgres_user }}'
+          set +e +o pipefail
+          echo 'Successful'
+          "
+      no_log: "{{ no_log }}"
+      register: data_migration
+      when: managed_database | bool
 
-- name: Set flag signifying that this instance has been migrated
-  set_fact:
-    tower_migrated_from_secret: "{{ old_postgres_configuration_name }}"
+    - name: Migrate data to an external target
+      ansible.builtin.include_tasks: migrate_data_external.yml
+      when: not managed_database | bool
+
+    - name: Set flag signifying that this instance has been migrated
+      set_fact:
+        tower_migrated_from_secret: "{{ old_postgres_configuration_name }}"
+
+    - name: Persist completed data migration before continuing installation
+      operator_sdk.util.k8s_status:
+        api_version: '{{ api_version }}'
+        kind: '{{ kind }}'
+        name: '{{ ansible_operator_meta.name }}'
+        namespace: '{{ ansible_operator_meta.namespace }}'
+        status:
+          migratedFromSecret: '{{ tower_migrated_from_secret }}'
+      register: installer_migration_status
+      until: installer_migration_status is succeeded
+      # Four retries plus the initial request make five attempts.
+      retries: 4
+      delay: 5
+  always:
+    - name: Remove external data migration pod
+      kubernetes.core.k8s:
+        api_version: v1
+        kind: Pod
+        namespace: '{{ ansible_operator_meta.namespace }}'
+        name: '{{ ansible_operator_meta.name }}-data-migration'
+        state: absent
+        wait: true
+      when: not managed_database | bool

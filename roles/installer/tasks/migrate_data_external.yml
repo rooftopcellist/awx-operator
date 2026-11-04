@@ -1,0 +1,60 @@
+---
+- name: Remove stale external data migration pod
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Pod
+    namespace: '{{ ansible_operator_meta.namespace }}'
+    name: '{{ ansible_operator_meta.name }}-data-migration'
+    state: absent
+    wait: true
+
+- name: Create external data migration pod and wait for readiness
+  kubernetes.core.k8s:
+    definition: "{{ lookup('template', 'pods/data-migration.yaml.j2') }}"
+    state: present
+    wait: true
+    wait_timeout: 300
+    wait_condition:
+      type: Ready
+      status: 'True'
+
+- name: Stream source archive into the external target database
+  kubernetes.core.k8s_exec:
+    namespace: '{{ ansible_operator_meta.namespace }}'
+    pod: '{{ ansible_operator_meta.name }}-data-migration'
+    container: data-migration
+    command: 'bash -c {{ installer_external_migration_command | quote }}'
+  vars:
+    # Quote the complete script once, so the exec client cannot expand its
+    # variables. Passwords are resolved from Secret references inside the pod.
+    installer_external_migration_command: |
+      set -e -o pipefail
+      keepalive() {
+        trap 'kill "${sleep_pid:-}" 2>/dev/null || true; exit 0' TERM INT
+        while true; do
+          echo "Migrating data from old database..."
+          sleep 60 &
+          sleep_pid=$!
+          wait "$sleep_pid"
+        done
+      }
+      keepalive &
+      keepalive_pid=$!
+      cleanup() {
+        rc=$?
+        trap - EXIT
+        kill "$keepalive_pid" 2>/dev/null || true
+        wait "$keepalive_pid" 2>/dev/null || true
+        exit "$rc"
+      }
+      trap cleanup EXIT
+      trap 'exit 130' INT
+      trap 'exit 143' TERM
+      PGPASSWORD="$SOURCE_PGPASSWORD" PGSSLMODE="${SOURCE_PGSSLMODE:-prefer}" \
+        PGTARGETSESSIONATTRS="${SOURCE_PGTARGETSESSIONATTRS:-any}" {{ pgdump }} | \
+        PGPASSWORD="$TARGET_PGPASSWORD" PGSSLMODE="${TARGET_PGSSLMODE:-prefer}" \
+        PGTARGETSESSIONATTRS="${TARGET_PGTARGETSESSIONATTRS:-any}" \
+        pg_restore --clean --if-exists --no-owner --no-acl --exit-on-error \
+        -h "$TARGET_PGHOST" -p "$TARGET_PGPORT" -U "$TARGET_PGUSER" -d "$TARGET_PGDATABASE"
+  register: installer_external_migration_result
+  no_log: '{{ no_log }}'

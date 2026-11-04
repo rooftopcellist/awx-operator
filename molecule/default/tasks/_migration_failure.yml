@@ -1,0 +1,60 @@
+---
+- name: Break fixture credentials
+  kubernetes.core.k8s:
+    namespace: '{{ migration_namespace }}'
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: '{{ broken_secret }}'
+      stringData:
+        password: incorrect-fixture-password
+
+- name: Verify failed transfer does not record completion
+  block:
+    - name: Attempt migration with invalid credentials
+      ansible.builtin.include_role:
+        name: installer
+        tasks_from: database.yml
+
+    - name: Fail if invalid credentials were accepted
+      ansible.builtin.fail:
+        msg: Invalid credentials were accepted
+  rescue:
+    - name: Assert the transfer failed
+      ansible.builtin.assert:
+        that: ansible_failed_task.name == 'Stream source archive into the external target database'
+
+    - name: Read failed migration status
+      kubernetes.core.k8s_info:
+        api_version: awx.ansible.com/v1beta1
+        kind: AWX
+        namespace: '{{ migration_namespace }}'
+        name: migration
+      register: failed_migration
+
+    - name: Check completion remains unset
+      ansible.builtin.assert:
+        that: failed_migration.resources[0].status.migratedFromSecret is not defined
+
+    - name: Verify client pod cleanup after failed transfer
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: '{{ migration_namespace }}'
+        name: migration-data-migration
+      register: failed_client
+
+    - name: Assert failed client was removed
+      ansible.builtin.assert:
+        that: failed_client.resources | length == 0
+  always:
+    - name: Correct fixture credentials for the next reconciliation
+      kubernetes.core.k8s:
+        namespace: '{{ migration_namespace }}'
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: '{{ broken_secret }}'
+          stringData:
+            password: migration-fixture-password

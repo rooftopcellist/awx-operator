@@ -1,0 +1,31 @@
+---
+- name: Read copied data and target object ownership
+  kubernetes.core.k8s_exec:
+    namespace: '{{ migration_namespace }}'
+    pod: migration-external
+    command: >-
+      psql -U target_user -d target_db -Atc
+      "SELECT value || ':' || tableowner FROM migration_sentinel, pg_tables WHERE tablename = 'migration_sentinel';"
+  register: target_data
+
+- name: Read durable completion
+  kubernetes.core.k8s_info:
+    api_version: awx.ansible.com/v1beta1
+    kind: AWX
+    namespace: '{{ migration_namespace }}'
+    name: migration
+  register: completed_migration
+
+- name: Read client pod after migration
+  kubernetes.core.k8s_info:
+    kind: Pod
+    namespace: '{{ migration_namespace }}'
+    name: migration-data-migration
+  register: completed_client
+
+- name: Verify copy, target ownership, durable status, and client cleanup
+  ansible.builtin.assert:
+    that:
+      - target_data.stdout | trim == 'copied:target_user'
+      - completed_migration.resources[0].status.migratedFromSecret == 'migration-source'
+      - completed_client.resources | length == 0

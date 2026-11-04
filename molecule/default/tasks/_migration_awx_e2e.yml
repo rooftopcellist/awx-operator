@@ -1,0 +1,159 @@
+---
+- name: Resolve the application image used by the suite
+  ansible.builtin.set_fact:
+    migration_application_image: '{{ awx_image | default("", true) or "quay.io/ansible/awx" }}:{{ awx_version or default_awx_version }}'
+
+- name: Create application settings for the disposable source database
+  kubernetes.core.k8s:
+    namespace: '{{ migration_namespace }}'
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: migration-source-settings
+      data:
+        settings.py: |
+          import os
+          SECRET_KEY = 'migration-fixture-original-secret-key'
+          DATABASES = {'default': {
+              'ATOMIC_REQUESTS': True,
+              'ENGINE': 'awx.main.db.profiled_pg',
+              'NAME': os.environ['database'],
+              'USER': os.environ['username'],
+              'PASSWORD': os.environ['password'],
+              'HOST': os.environ['host'],
+              'PORT': os.environ['port'],
+              'OPTIONS': {'sslmode': 'disable'},
+          }}
+
+- name: Initialize AWX source schema and an encrypted credential
+  kubernetes.core.k8s:
+    namespace: '{{ migration_namespace }}'
+    definition:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: migration-seed-application
+      spec:
+        restartPolicy: Never
+        containers:
+          - name: seed
+            image: '{{ migration_application_image }}'
+            envFrom:
+              - secretRef:
+                  name: migration-source
+            env:
+              - name: AWX_SETTINGS_FILE
+                value: /migration/settings.py
+            command: [bash, -ec]
+            args:
+              - |
+                awx-manage migrate --noinput
+                awx-manage shell -c "
+                from awx.main.models import Credential, CredentialType
+                ct = CredentialType.objects.create(name='Migration fixture', kind='cloud',
+                    inputs={'fields': [{'id': 'password', 'label': 'Password', 'type': 'string', 'secret': True}]},
+                    injectors={})
+                c = Credential.objects.create(name='Migration encrypted credential', credential_type=ct,
+                    inputs={'password': 'migration-fixture-plaintext'})
+                assert c.get_input('password') == 'migration-fixture-plaintext'
+                "
+            volumeMounts:
+              - name: settings
+                mountPath: /migration
+                readOnly: true
+        volumes:
+          - name: settings
+            configMap:
+              name: migration-source-settings
+    wait: true
+    wait_timeout: 900
+    wait_condition:
+      type: Ready
+      status: 'False'
+      reason: PodCompleted
+
+- name: Provision dedicated external application target database
+  kubernetes.core.k8s_exec:
+    namespace: '{{ migration_namespace }}'
+    pod: migration-external
+    command: psql -U postgres -c 'CREATE DATABASE application_db OWNER target_user;'
+
+- name: Create source, target, and original encryption key Secrets in the watched namespace
+  kubernetes.core.k8s:
+    namespace: '{{ namespace }}'
+    definition:
+      - apiVersion: v1
+        kind: Secret
+        metadata:
+          name: migration-app-source
+        stringData:
+          host: 'migration-source.{{ migration_namespace }}.svc'
+          port: '5433'
+          username: source_user
+          password: migration-fixture-password
+          database: source_db
+          sslmode: disable
+      - apiVersion: v1
+        kind: Secret
+        metadata:
+          name: migration-app-target
+        stringData:
+          host: 'migration-external.{{ migration_namespace }}.svc'
+          port: '5544'
+          username: target_user
+          password: migration-fixture-password
+          database: application_db
+          type: unmanaged
+          sslmode: disable
+          target_session_attrs: read-write
+      - apiVersion: v1
+        kind: Secret
+        metadata:
+          name: migration-app-key
+        stringData:
+          secret_key: migration-fixture-original-secret-key
+
+- name: Reconcile a real AWX resource onto the external database
+  kubernetes.core.k8s:
+    namespace: '{{ namespace }}'
+    definition:
+      apiVersion: awx.ansible.com/v1beta1
+      kind: AWX
+      metadata:
+        name: migration-app
+      spec:
+        image: '{{ awx_image | default("", true) or "quay.io/ansible/awx" }}'
+        image_version: '{{ awx_version or default_awx_version }}'
+        old_postgres_configuration_secret: migration-app-source
+        postgres_configuration_secret: migration-app-target
+        secret_key_secret: migration-app-key
+    wait: true
+    wait_timeout: 1200
+    wait_condition:
+      type: Running
+      reason: Successful
+      status: 'True'
+  register: migrated_application
+
+- name: Find the migrated application web pod
+  kubernetes.core.k8s_info:
+    kind: Pod
+    namespace: '{{ namespace }}'
+    label_selectors:
+      - app.kubernetes.io/name=migration-app-web
+  register: migration_application_pod
+
+- name: Verify migrated AWX can decrypt the original credential
+  kubernetes.core.k8s_exec:
+    namespace: '{{ namespace }}'
+    pod: '{{ migration_application_pod.resources[0].metadata.name }}'
+    container: migration-app-web
+    command: >-
+      awx-manage shell -c
+      "from awx.main.models import Credential;
+      assert Credential.objects.get(name='Migration encrypted credential').get_input('password') == 'migration-fixture-plaintext'"
+
+- name: Verify application migration completion was recorded
+  ansible.builtin.assert:
+    that: migrated_application.result.status.migratedFromSecret == 'migration-app-source'

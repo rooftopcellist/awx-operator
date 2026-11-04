@@ -1,0 +1,231 @@
+---
+- name: Verify database migration against disposable PostgreSQL fixtures
+  vars:
+    # The operator watches its own namespace. Direct role invocations in this
+    # separate namespace exercise real status writes without a racing reconcile.
+    migration_namespace: '{{ namespace }}-migration'
+    migration_client_image: quay.io/sclorg/postgresql-15-c9s:latest
+    ansible_operator_meta:
+      name: migration
+      namespace: '{{ migration_namespace }}'
+    postgres_image: quay.io/sclorg/postgresql-15-c9s
+    postgres_image_version: latest
+    _postgres_image: '{{ migration_client_image }}'
+    postgres_configuration_secret: migration-target
+    old_postgres_configuration_secret: migration-source
+    postgres_label_selector: migration-test-database=managed
+  tags: [migration]
+  block:
+    - name: Create fixture namespace
+      kubernetes.core.k8s:
+        api_version: v1
+        kind: Namespace
+        name: '{{ migration_namespace }}'
+
+    - name: Start disposable PostgreSQL databases
+      kubernetes.core.k8s:
+        definition: "{{ lookup('template', 'migration-databases.yml.j2') | from_yaml_all | list }}"
+
+    - name: Wait for database fixtures
+      kubernetes.core.k8s_exec:
+        namespace: '{{ migration_namespace }}'
+        pod: 'migration-{{ item }}'
+        command: pg_isready -h 127.0.0.1
+      register: fixture_ready
+      until: fixture_ready is succeeded
+      retries: 60
+      delay: 5
+      loop: [source, external]
+
+    - name: Seed source data owned by the source login
+      kubernetes.core.k8s_exec:
+        namespace: '{{ migration_namespace }}'
+        pod: migration-source
+        command: >-
+          psql -U source_user -d source_db -v ON_ERROR_STOP=1 -c
+          "CREATE TABLE migration_sentinel (value text); INSERT INTO migration_sentinel VALUES ('copied');"
+
+    - name: Create migration CR and database Secrets
+      kubernetes.core.k8s:
+        namespace: '{{ migration_namespace }}'
+        definition:
+          - apiVersion: awx.ansible.com/v1beta1
+            kind: AWX
+            metadata:
+              name: migration
+            spec: {}
+          - apiVersion: v1
+            kind: Secret
+            metadata:
+              name: migration-source
+            stringData:
+              host: migration-source
+              port: '5433'
+              database: source_db
+              username: source_user
+              password: migration-fixture-password
+              sslmode: disable
+          - apiVersion: v1
+            kind: Secret
+            metadata:
+              name: migration-target
+            stringData:
+              host: migration-external
+              port: '5544'
+              database: target_db
+              username: target_user
+              password: migration-fixture-password
+              type: unmanaged
+              sslmode: disable
+              target_session_attrs: read-write
+
+    - name: Initialize status normally supplied by the watching operator
+      operator_sdk.util.k8s_status:
+        api_version: awx.ansible.com/v1beta1
+        kind: AWX
+        name: migration
+        namespace: '{{ migration_namespace }}'
+        status:
+          conditions: []
+
+    - name: Resolve initial source and target fixture settings
+      ansible.builtin.include_role:
+        name: installer
+        tasks_from: database_configuration.yml
+
+    - name: Look for any managed target fixture before external migration
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: '{{ migration_namespace }}'
+        label_selectors:
+          - '{{ postgres_label_selector }}'
+      register: managed_targets_before_external
+
+    - name: Require an external scenario with no managed target pod
+      ansible.builtin.assert:
+        that: managed_targets_before_external.resources | length == 0
+
+    - name: Reject identical literal endpoints before creating a client pod
+      block:
+        - name: Attempt migration to the source database
+          ansible.builtin.include_role:
+            name: installer
+            tasks_from: migrate_data.yml
+          vars:
+            awx_postgres_host: migration-source
+            awx_postgres_port: '5433'
+            awx_postgres_database: source_db
+
+        - name: Fail if identical endpoints were accepted
+          ansible.builtin.fail:
+            msg: Identical source and target were accepted
+      rescue:
+        - name: Assert endpoint validation caused the failure
+          ansible.builtin.assert:
+            that: ansible_failed_task.name == 'Reject identical source and target databases'
+
+    - name: Exercise transfer failures and corrected credentials
+      ansible.builtin.include_tasks: _migration_failure.yml
+      loop: [migration-source, migration-target]
+      loop_control:
+        loop_var: broken_secret
+
+    - name: Run migration to external database without a managed target pod
+      ansible.builtin.include_role:
+        name: installer
+        tasks_from: database.yml
+
+    - name: Assert external data, ownership, completion, and cleanup
+      ansible.builtin.include_tasks: _migration_assertions.yml
+
+    - name: Add data after durable migration completion
+      kubernetes.core.k8s_exec:
+        namespace: '{{ migration_namespace }}'
+        pod: migration-external
+        command: psql -U target_user -d target_db -c "INSERT INTO migration_sentinel VALUES ('after-transfer');"
+
+    - name: Simulate a later installation failure
+      block:
+        - name: Fail installation after transfer
+          ansible.builtin.fail:
+            msg: Simulated installation failure after durable completion
+      rescue:
+        - name: Retry database reconciliation using existing completion status
+          ansible.builtin.include_role:
+            name: installer
+            tasks_from: database.yml
+
+    - name: Verify subsequent reconciliation preserved new target data
+      kubernetes.core.k8s_exec:
+        namespace: '{{ migration_namespace }}'
+        pod: migration-external
+        command: psql -U target_user -d target_db -Atc "SELECT count(*) FROM migration_sentinel;"
+      register: preserved_data
+      failed_when: preserved_data.stdout | trim != '2'
+
+    - name: Create managed fixture after all external migration tests
+      kubernetes.core.k8s:
+        definition: "{{ lookup('template', 'migration-databases.yml.j2') | from_yaml_all | list }}"
+      vars:
+        migration_databases: [managed]
+
+    - name: Wait for managed fixture database
+      kubernetes.core.k8s_exec:
+        namespace: '{{ migration_namespace }}'
+        pod: migration-managed
+        command: pg_isready -h 127.0.0.1
+      register: managed_ready
+      until: managed_ready is succeeded
+      retries: 60
+      delay: 5
+
+    - name: Verify existing managed migration path
+      ansible.builtin.include_role:
+        name: installer
+        tasks_from: migrate_data.yml
+      vars:
+        managed_database: true
+        awx_postgres_host: migration-managed
+        awx_postgres_port: '5544'
+        awx_postgres_database: source_db
+        awx_postgres_user: source_user
+        database_username: source_user
+        database_name: source_db
+
+    - name: Verify managed target contains copied data
+      kubernetes.core.k8s_exec:
+        namespace: '{{ migration_namespace }}'
+        pod: migration-managed
+        command: psql -U source_user -d source_db -Atc "SELECT value FROM migration_sentinel;"
+      register: managed_data
+      failed_when: managed_data.stdout | trim != 'copied'
+
+    - name: Verify application startup and encrypted credential usability
+      ansible.builtin.include_tasks: _migration_awx_e2e.yml
+
+  always:
+    - name: Delete the migrated application
+      kubernetes.core.k8s:
+        api_version: awx.ansible.com/v1beta1
+        kind: AWX
+        name: migration-app
+        namespace: '{{ namespace }}'
+        state: absent
+        wait: true
+
+    - name: Delete application fixture Secrets
+      kubernetes.core.k8s:
+        api_version: v1
+        kind: Secret
+        name: '{{ item }}'
+        namespace: '{{ namespace }}'
+        state: absent
+      loop: [migration-app-source, migration-app-target, migration-app-key]
+
+    - name: Delete disposable migration fixtures
+      kubernetes.core.k8s:
+        api_version: v1
+        kind: Namespace
+        name: '{{ migration_namespace }}'
+        state: absent
+        wait: true

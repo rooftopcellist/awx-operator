@@ -1,0 +1,38 @@
+{% for database in migration_databases | default(['source', 'external']) %}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: migration-{{ database }}
+  namespace: '{{ migration_namespace }}'
+  labels:
+    migration-test-database: '{{ database }}'
+spec:
+  restartPolicy: Never
+  containers:
+    - name: postgres
+      image: '{{ migration_client_image }}'
+      env:
+        - name: POSTGRESQL_USER
+          value: '{{ "target_user" if database == "external" else "source_user" }}'
+        - name: POSTGRESQL_DATABASE
+          value: '{{ "target_db" if database == "external" else "source_db" }}'
+        - name: POSTGRESQL_PASSWORD
+          value: migration-fixture-password
+        - name: POSTGRES_PASSWORD
+          value: migration-fixture-password
+        - name: PGPASSWORD_OLD
+          value: migration-fixture-password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: migration-{{ database }}
+  namespace: '{{ migration_namespace }}'
+spec:
+  selector:
+    migration-test-database: '{{ database }}'
+  ports:
+    - port: {{ 5433 if database == 'source' else 5544 }}
+      targetPort: 5432
+{% endfor %}

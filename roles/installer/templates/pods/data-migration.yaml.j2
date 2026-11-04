@@ -1,0 +1,66 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: '{{ ansible_operator_meta.name }}-data-migration'
+  namespace: '{{ ansible_operator_meta.namespace }}'
+  labels:
+    {{ (lookup("template", "../common/templates/labels/common.yaml.j2") | from_yaml |
+        combine({'app.kubernetes.io/component': 'db-management'})) | to_nice_yaml | indent(width=4) | trim }}
+spec:
+{% if image_pull_secret is defined %}
+  imagePullSecrets:
+    - name: {{ image_pull_secret }}
+{% elif image_pull_secrets | length > 0 %}
+  imagePullSecrets:
+{% for secret in image_pull_secrets %}
+    - name: {{ secret }}
+{% endfor %}
+{% endif %}
+{% if postgres_priority_class %}
+  priorityClassName: '{{ postgres_priority_class }}'
+{% endif %}
+{% if postgres_selector %}
+  nodeSelector:
+    {{ postgres_selector | indent(width=4) | trim }}
+{% endif %}
+{% if postgres_tolerations %}
+  tolerations:
+    {{ postgres_tolerations | indent(width=4) | trim }}
+{% endif %}
+  restartPolicy: Never
+  containers:
+    - name: data-migration
+      image: '{{ _postgres_image }}'
+      imagePullPolicy: '{{ image_pull_policy }}'
+      command: ["sleep", "infinity"]
+      resources: {{ postgres_resource_requirements }}
+      env:
+{% for prefix, secret in [('SOURCE', old_postgres_configuration_name), ('TARGET', __postgres_configuration_secret)] %}
+{% for variable, key in [('PGHOST', 'host'), ('PGPORT', 'port'), ('PGUSER', 'username'), ('PGDATABASE', 'database'),
+                         ('PGPASSWORD', 'password'), ('PGSSLMODE', 'sslmode'), ('PGTARGETSESSIONATTRS', 'target_session_attrs')] %}
+        - name: {{ prefix }}_{{ variable }}
+          valueFrom:
+            secretKeyRef:
+              name: '{{ secret }}'
+              key: {{ key }}
+{% if key in ['sslmode', 'target_session_attrs'] %}
+              optional: true
+{% endif %}
+{% endfor %}
+{% endfor %}
+        - name: PGSSLROOTCERT
+          value: '{{ "/etc/awx-migration-ca/bundle-ca.crt" if bundle_ca_crt else ca_trust_bundle }}'
+{% if bundle_ca_crt %}
+      volumeMounts:
+        - name: database-ca
+          mountPath: /etc/awx-migration-ca
+          readOnly: true
+  volumes:
+    - name: database-ca
+      secret:
+        secretName: '{{ bundle_cacert_secret }}'
+        items:
+          - key: bundle-ca.crt
+            path: bundle-ca.crt
+{% endif %}
